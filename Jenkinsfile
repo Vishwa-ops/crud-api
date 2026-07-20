@@ -1,10 +1,6 @@
 pipeline {
     agent any
 
-    environment {
-        APP_DIR = "/home/ubuntu/crud-api"
-    }
-
     stages {
 
         stage('Checkout') {
@@ -16,19 +12,23 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'cd $APP_DIR && npm install'
+                sh 'npm install'
             }
         }
 
         stage('Generate Prisma Client') {
             steps {
-                sh 'cd $APP_DIR && npx prisma generate'
+                sh 'npx prisma generate'
             }
         }
 
         stage('Deploy') {
             steps {
                 sh '''
+                cp -r . /home/ubuntu/crud-api/
+                cd /home/ubuntu/crud-api
+                npm install
+                npx prisma generate
                 pm2 restart crud-api || pm2 start server.js --name crud-api
                 '''
             }
@@ -37,11 +37,11 @@ pipeline {
 
     post {
         success {
-            echo 'CRUD API deployed successfully.'
+            echo 'CRUD API deployed successfully!'
         }
 
         failure {
-            echo 'Deployment failed.'
+            echo 'Deployment failed!'
         }
     }
 }
