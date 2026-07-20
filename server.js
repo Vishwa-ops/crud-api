@@ -14,7 +14,7 @@ app.use(express.json());
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "UP",
-    message: "CRUD API is running",
+    message: "message: "CRUD API deployed via Jenkins"",
   });
 });
 
