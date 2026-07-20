@@ -3,6 +3,7 @@ pipeline {
 
     environment {
         APP_DIR = "/home/ubuntu/crud-api"
+        BACKUP_DIR = "/home/ubuntu/crud-api-backup"
     }
 
     stages {
@@ -26,17 +27,24 @@ pipeline {
             }
         }
 
+        stage('Backup Current Version') {
+            steps {
+                sh '''
+                rm -rf $BACKUP_DIR
+                cp -r $APP_DIR $BACKUP_DIR
+                '''
+            }
+        }
+
         stage('Deploy') {
             steps {
                 sh '''
-                mkdir -p $APP_DIR
-
                 rsync -av \
-                    --delete \
-                    --exclude=node_modules \
-                    --exclude=.git \
-                    --exclude=.env \
-                    ./ $APP_DIR/
+                --delete \
+                --exclude=node_modules \
+                --exclude=.git \
+                --exclude=.env \
+                ./ $APP_DIR/
 
                 cd $APP_DIR
 
@@ -44,7 +52,7 @@ pipeline {
 
                 npx prisma generate
 
-                pm2 restart crud-api || pm2 start server.js --name crud-api
+                pm2 restart crud-api --update-env
 
                 pm2 save
                 '''
@@ -53,16 +61,30 @@ pipeline {
     }
 
     post {
+
         success {
-            echo '========================================='
-            echo 'CRUD API deployed successfully!'
-            echo '========================================='
+            echo "Deployment Successful"
         }
 
         failure {
-            echo '========================================='
-            echo 'Deployment failed!'
-            echo '========================================='
+            echo "Deployment Failed"
+            echo "Rolling Back..."
+
+            sh '''
+            rm -rf $APP_DIR
+
+            cp -r $BACKUP_DIR $APP_DIR
+
+            cd $APP_DIR
+
+            npm install
+
+            pm2 restart crud-api --update-env
+
+            pm2 save
+            '''
+
+            echo "Rollback Completed"
         }
     }
 }
