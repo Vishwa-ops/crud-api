@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    environment {
+        APP_DIR = "/home/ubuntu/crud-api"
+    }
+
     stages {
 
         stage('Checkout') {
@@ -25,11 +29,24 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                cp -r . /home/ubuntu/crud-api/
-                cd /home/ubuntu/crud-api
+                mkdir -p $APP_DIR
+
+                rsync -av \
+                    --delete \
+                    --exclude=node_modules \
+                    --exclude=.git \
+                    --exclude=.env \
+                    ./ $APP_DIR/
+
+                cd $APP_DIR
+
                 npm install
+
                 npx prisma generate
+
                 pm2 restart crud-api || pm2 start server.js --name crud-api
+
+                pm2 save
                 '''
             }
         }
@@ -37,11 +54,15 @@ pipeline {
 
     post {
         success {
+            echo '========================================='
             echo 'CRUD API deployed successfully!'
+            echo '========================================='
         }
 
         failure {
+            echo '========================================='
             echo 'Deployment failed!'
+            echo '========================================='
         }
     }
 }
