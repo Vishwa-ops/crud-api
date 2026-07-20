@@ -30,8 +30,18 @@ pipeline {
         stage('Backup Current Version') {
             steps {
                 sh '''
+                echo "Creating Backup..."
+
                 rm -rf $BACKUP_DIR
-                cp -r $APP_DIR $BACKUP_DIR
+                mkdir -p $BACKUP_DIR
+
+                rsync -av \
+                    --exclude=node_modules \
+                    --exclude=.git \
+                    --exclude=.env \
+                    $APP_DIR/ $BACKUP_DIR/
+
+                echo "Backup Completed"
                 '''
             }
         }
@@ -39,12 +49,14 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
+                echo "Deploying Application..."
+
                 rsync -av \
-                --delete \
-                --exclude=node_modules \
-                --exclude=.git \
-                --exclude=.env \
-                ./ $APP_DIR/
+                    --delete \
+                    --exclude=node_modules \
+                    --exclude=.git \
+                    --exclude=.env \
+                    ./ $APP_DIR/
 
                 cd $APP_DIR
 
@@ -52,9 +64,11 @@ pipeline {
 
                 npx prisma generate
 
-                pm2 restart crud-api --update-env
+                pm2 restart crud-api --update-env || pm2 start server.js --name crud-api
 
                 pm2 save
+
+                echo "Deployment Completed"
                 '''
             }
         }
@@ -63,28 +77,51 @@ pipeline {
     post {
 
         success {
+            echo "===================================="
             echo "Deployment Successful"
+            echo "===================================="
         }
 
         failure {
+
+            echo "===================================="
             echo "Deployment Failed"
-            echo "Rolling Back..."
+            echo "Starting Rollback..."
+            echo "===================================="
 
             sh '''
-            rm -rf $APP_DIR
+            if [ -d "$BACKUP_DIR" ]; then
 
-            cp -r $BACKUP_DIR $APP_DIR
+                rm -rf $APP_DIR
 
-            cd $APP_DIR
+                mkdir -p $APP_DIR
 
-            npm install
+                rsync -av \
+                    --exclude=node_modules \
+                    $BACKUP_DIR/ $APP_DIR/
 
-            pm2 restart crud-api --update-env
+                cd $APP_DIR
 
-            pm2 save
+                npm install
+
+                npx prisma generate
+
+                pm2 restart crud-api --update-env || pm2 start server.js --name crud-api
+
+                pm2 save
+
+                echo "Rollback Successful"
+
+            else
+
+                echo "No Backup Found"
+
+            fi
             '''
+        }
 
-            echo "Rollback Completed"
+        always {
+            cleanWs()
         }
     }
 }
